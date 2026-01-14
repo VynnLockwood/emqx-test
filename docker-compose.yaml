@@ -1,0 +1,52 @@
+version: '3'
+
+services:
+  # --- EMQX BROKER ---
+  emqx:
+    image: emqx/emqx:latest
+    container_name: emqx
+    restart: always
+    ports:
+      - "18840:1883"   # MQTT TCP
+      - "18084:18083"  # Dashboard
+      - "8083:8083"    # WebSocket
+      - "8084:8084"    # Secure WebSocket
+    environment:
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=public
+    volumes:
+      - ./emqx_data:/opt/emqx/data
+      - ./emqx_log:/opt/emqx/log
+
+  # --- NODE-RED ---
+  nodered:
+    image: nodered/node-red:latest
+    container_name: nodered-emqx
+    restart: always
+    ports:
+      - "18801:1880"  # Access editor at http://localhost:18801
+    volumes:
+      - ./nodered_data:/data
+    environment:
+      - TZ=Asia/Bangkok
+    depends_on:
+      - emqx
+      - influxdb      # Wait for database to start
+
+  # --- INFLUXDB (New Service) ---
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb-emqx
+    restart: always
+    ports:
+      - "8086:8086"   # Access UI at http://localhost:8086
+    volumes:
+      - ./influxdb_data:/var/lib/influxdb2
+      - ./influxdb_config:/etc/influxdb2
+    environment:
+      # Auto-setup on first run
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=password123  # <--- Change this if you want
+      - DOCKER_INFLUXDB_INIT_ORG=myorg
+      - DOCKER_INFLUXDB_INIT_BUCKET=sensor_data
