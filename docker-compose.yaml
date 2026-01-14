@@ -1,7 +1,24 @@
 version: '3'
 
 services:
-  # --- EMQX BROKER ---
+  # ==========================================
+  # 1. NGINX (The Gateway - Static IP)
+  # ==========================================
+  nginx:
+    image: nginx:latest
+    container_name: nginx_proxy
+    restart: always
+    ports:
+      - "4321:4321"  # Access via http://YOUR_IP:4321
+    volumes:
+      - ./nginx_config:/etc/nginx/conf.d
+    networks:
+      my_custom_network:
+        ipv4_address: 172.25.0.100  # <--- Static IP Anchor
+
+  # ==========================================
+  # 2. EMQX BROKER
+  # ==========================================
   emqx:
     image: emqx/emqx:latest
     container_name: emqx
@@ -9,44 +26,67 @@ services:
     ports:
       - "18840:1883"   # MQTT TCP
       - "18084:18083"  # Dashboard
-      - "8083:8083"    # WebSocket
-      - "8084:8084"    # Secure WebSocket
+      # FIX: External 8085 -> Internal 8083 (Standard WS)
+      - "8085:8083"    
+      # FIX: External 8089 -> Internal 8084 (Standard WSS)
+      - "8089:8084"    
     environment:
       - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
       - EMQX_DASHBOARD__DEFAULT_PASSWORD=public
     volumes:
       - ./emqx_data:/opt/emqx/data
       - ./emqx_log:/opt/emqx/log
+    networks:
+      - my_custom_network
 
-  # --- NODE-RED ---
+  # ==========================================
+  # 3. NODE-RED
+  # ==========================================
   nodered:
     image: nodered/node-red:latest
     container_name: nodered-emqx
     restart: always
     ports:
-      - "18801:1880"  # Access editor at http://localhost:18801
+      - "18801:1880"   # Direct access if needed
     volumes:
       - ./nodered_data:/data
     environment:
       - TZ=Asia/Bangkok
     depends_on:
       - emqx
-      - influxdb      # Wait for database to start
+      - influxdb
+    networks:
+      - my_custom_network
 
-  # --- INFLUXDB (New Service) ---
+  # ==========================================
+  # 4. INFLUXDB
+  # ==========================================
   influxdb:
     image: influxdb:2.7
     container_name: influxdb-emqx
     restart: always
     ports:
-      - "8086:8086"   # Access UI at http://localhost:8086
+      # FIX: External 8087 -> Internal 8086 (Standard Influx)
+      - "8087:8086"
     volumes:
       - ./influxdb_data:/var/lib/influxdb2
       - ./influxdb_config:/etc/influxdb2
     environment:
-      # Auto-setup on first run
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=password123  # <--- Change this if you want
+      - DOCKER_INFLUXDB_INIT_PASSWORD=password123
       - DOCKER_INFLUXDB_INIT_ORG=myorg
       - DOCKER_INFLUXDB_INIT_BUCKET=sensor_data
+    networks:
+      - my_custom_network
+
+# ==========================================
+# NETWORK CONFIGURATION
+# ==========================================
+networks:
+  my_custom_network:
+    driver: bridge
+    ipam:
+      config:
+        # Using 172.25.x.x to avoid conflicts
+        - subnet: 172.25.0.0/16
