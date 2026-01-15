@@ -1,0 +1,39 @@
+version: '3'
+
+services:
+  # ==========================================
+  # INFLUXDB (Database)
+  # ==========================================
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb
+    restart: always
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./influxdb_data:/var/lib/influxdb2
+      - ./influxdb_config:/etc/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=influxdbtest
+      - DOCKER_INFLUXDB_INIT_ORG=myorg
+      - DOCKER_INFLUXDB_INIT_BUCKET=sensor_data
+    networks:
+      - iot_network
+
+  # ==========================================
+  # TUNNEL FOR INFLUXDB
+  # ==========================================
+  cloudflared-influxdb:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared_influxdb_tunnel
+    restart: always
+    command: tunnel --url http://influxdb:8089
+    networks:
+      - iot_network
+
+# Use the pre-existing network
+networks:
+  iot_network:
+    external: true
