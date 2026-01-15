@@ -2,6 +2,29 @@ version: '3'
 
 services:
   # ==========================================
+  # 0.1 CLOUDFLARE TUNNEL (Quick Mode - ไม่ต้องใช้ Token)
+  # ==========================================
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared_tunnel
+    restart: always
+    # สั่งให้สร้าง Tunnel ชั่วคราว วิ่งไปหา Nginx พอร์ต 4321
+    command: tunnel --url http://nginx_proxy:4321
+    networks:
+      - my_custom_network
+
+  # ==========================================
+  # 0.2 PLAYIT.GG (แผนสำรอง - ลิงก์ถาวร)
+  # ==========================================
+  playit:
+    image: ghcr.io/playit-cloud/playit-agent:0.16
+    container_name: playit_agent
+    restart: always
+    network_mode: host
+    environment:
+      - SECRET_KEY=10ccac4d2842ca1117cb0050cd45c98186342d2d3ea118b86d2acc0978d4dd4e
+
+  # ==========================================
   # 1. NGINX (The Gateway)
   # ==========================================
   nginx:
@@ -9,11 +32,12 @@ services:
     container_name: nginx_proxy
     restart: always
     ports:
-      - "4321:4321"  # Access via http://YOUR_IP:4321
+      - "4321:4321"
     volumes:
       - ./nginx_config:/etc/nginx/conf.d
     networks:
-      - my_iot_net
+      my_custom_network:
+        ipv4_address: 172.25.0.100
 
   # ==========================================
   # 2. EMQX BROKER
@@ -23,10 +47,10 @@ services:
     container_name: emqx
     restart: always
     ports:
-      - "18840:1883"   # MQTT TCP
-      - "18084:18083"  # Dashboard
-      - "8085:8083"    # WS (External 8085 -> Internal 8083)
-      - "8089:8084"    # WSS (External 8089 -> Internal 8084)
+      - "18840:1883"
+      - "18084:18083"
+      - "8085:8083"
+      - "8089:8084"
     environment:
       - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
       - EMQX_DASHBOARD__DEFAULT_PASSWORD=public
@@ -34,7 +58,7 @@ services:
       - ./emqx_data:/opt/emqx/data
       - ./emqx_log:/opt/emqx/log
     networks:
-      - my_iot_net
+      - my_custom_network
 
   # ==========================================
   # 3. NODE-RED
@@ -53,7 +77,7 @@ services:
       - emqx
       - influxdb
     networks:
-      - my_iot_net
+      - my_custom_network
 
   # ==========================================
   # 4. INFLUXDB
@@ -63,7 +87,7 @@ services:
     container_name: influxdb-emqx
     restart: always
     ports:
-      - "8087:8086"  # External 8087 -> Internal 8086
+      - "8087:8086"
     volumes:
       - ./influxdb_data:/var/lib/influxdb2
       - ./influxdb_config:/etc/influxdb2
@@ -74,11 +98,14 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=myorg
       - DOCKER_INFLUXDB_INIT_BUCKET=sensor_data
     networks:
-      - my_iot_net
+      - my_custom_network
 
 # ==========================================
-# NETWORK (Simple & Automatic)
+# NETWORK CONFIGURATION
 # ==========================================
 networks:
-  my_iot_net:
+  my_custom_network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
