@@ -2,30 +2,46 @@ version: '3'
 
 services:
   # ==========================================
-  # 0.1 CLOUDFLARE TUNNEL (Quick Mode - ไม่ต้องใช้ Token)
+  # EMQX (MQTT Broker)
   # ==========================================
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared_tunnel
+  emqx:
+    image: emqx/emqx:latest
+    container_name: emqx
     restart: always
-    # สั่งให้สร้าง Tunnel ชั่วคราว วิ่งไปหา Nginx พอร์ต 4321
-    command: tunnel --url http://nginx_proxy:4321
-    networks:
-      - my_custom_network
-
-  # ==========================================
-  # 0.2 PLAYIT.GG (แผนสำรอง - ลิงก์ถาวร)
-  # ==========================================
-  playit:
-    image: ghcr.io/playit-cloud/playit-agent:0.16
-    container_name: playit_agent
-    restart: always
-    network_mode: host
+    ports:
+      - "1883:1883"
+      - "8083:8083"
+      - "18083:18083"
     environment:
-      - SECRET_KEY=10ccac4d2842ca1117cb0050cd45c98186342d2d3ea118b86d2acc0978d4dd4e
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=emqxtest
+    volumes:
+      - ./emqx_data:/opt/emqx/data
+      - ./emqx_log:/opt/emqx/log
+    networks:
+      - iot_network
 
   # ==========================================
-  # 1. NGINX (The Gateway)
+  # NODE-RED (Logic)
+  # ==========================================
+  nodered:
+    image: nodered/node-red:latest
+    container_name: nodered-emqx
+    restart: always
+    ports:
+      - "1880:1880"
+    volumes:
+      - ./nodered_data:/data
+    environment:
+      - TZ=Asia/Bangkok
+    depends_on:
+      - emqx
+      # Removed influxdb/grafana depends_on because they are in different files now
+    networks:
+      - iot_network
+
+  # ==========================================
+  # NGINX (Gateway)
   # ==========================================
   nginx:
     image: nginx:latest
@@ -35,77 +51,26 @@ services:
       - "4321:4321"
     volumes:
       - ./nginx_config:/etc/nginx/conf.d
-    networks:
-      my_custom_network:
-        ipv4_address: 172.25.0.100
-
-  # ==========================================
-  # 2. EMQX BROKER
-  # ==========================================
-  emqx:
-    image: emqx/emqx:latest
-    container_name: emqx
-    restart: always
-    ports:
-      - "18840:1883"
-      - "18084:18083"
-      - "8085:8083"
-      - "8089:8084"
-    environment:
-      - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
-      - EMQX_DASHBOARD__DEFAULT_PASSWORD=public
-    volumes:
-      - ./emqx_data:/opt/emqx/data
-      - ./emqx_log:/opt/emqx/log
-    networks:
-      - my_custom_network
-
-  # ==========================================
-  # 3. NODE-RED
-  # ==========================================
-  nodered:
-    image: nodered/node-red:latest
-    container_name: nodered-emqx
-    restart: always
-    ports:
-      - "18801:1880"
-    volumes:
-      - ./nodered_data:/data
-    environment:
-      - TZ=Asia/Bangkok
+   
     depends_on:
+      - nodered
       - emqx
-      - influxdb
     networks:
-      - my_custom_network
+      iot_network:
+        ipv4_address: 172.28.0.100
 
   # ==========================================
-  # 4. INFLUXDB
+  # MAIN TUNNEL (Exposing Nginx)
   # ==========================================
-  influxdb:
-    image: influxdb:2.7
-    container_name: influxdb-emqx
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared_tunnel
     restart: always
-    ports:
-      - "8087:8086"
-    volumes:
-      - ./influxdb_data:/var/lib/influxdb2
-      - ./influxdb_config:/etc/influxdb2
-    environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=password123
-      - DOCKER_INFLUXDB_INIT_ORG=myorg
-      - DOCKER_INFLUXDB_INIT_BUCKET=sensor_data
+    command: tunnel --url http://nginx_proxy:4321
     networks:
-      - my_custom_network
+      - iot_network
 
-# ==========================================
-# NETWORK CONFIGURATION
-# ==========================================
+# Use the pre-existing network
 networks:
-  my_custom_network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.25.0.0/16
+  iot_network:
+    external: true
