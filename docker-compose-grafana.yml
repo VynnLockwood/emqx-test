@@ -1,0 +1,35 @@
+version: '3'
+
+services:
+  # ==========================================
+  # GRAFANA (Visualization)
+  # ==========================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-test-emqx
+    restart: always
+    ports:
+      - "3004:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=grafanatest
+    volumes:
+      - ./grafana_data:/var/lib/grafana
+    networks:
+      - iot_network
+
+  # ==========================================
+  # TUNNEL FOR GRAFANA
+  # ==========================================
+  cloudflared-grafana:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared_grafana_tunnel
+    restart: always
+    command: tunnel --url http://grafana:3000
+    networks:
+      - iot_network
+
+# Use the pre-existing network
+networks:
+  iot_network:
+    external: true
