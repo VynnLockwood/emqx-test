@@ -51,6 +51,7 @@ services:
       - "4321:4321"
     volumes:
       - ./nginx_config:/etc/nginx/conf.d
+      - ./nginx_config/.htpasswd:/etc/nginx/.htpasswd
    
     depends_on:
       - nodered
@@ -74,3 +75,4 @@ services:
 networks:
   iot_network:
     external: true
+
